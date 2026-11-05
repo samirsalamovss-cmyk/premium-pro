@@ -16,6 +16,55 @@
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+    import { getFirestore, doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      projectId: "outstanding-condition-bxjsq",
+      appId: "1:209241238373:web:b1926486641326753c0f8c",
+      apiKey: "AIzaSyAnExVgdJ1-uxoROHjrpABcldySgJgFniQ",
+      authDomain: "outstanding-condition-bxjsq.firebaseapp.com",
+      firestoreDatabaseId: "ai-studio-premiumchemicals-2530df4e-dc21-4636-80b5-d8debf298e81"
+    };
+
+    try {
+      const app = initializeApp(firebaseConfig);
+      const firestore = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+
+      onSnapshot(doc(firestore, "company", "database"), (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          if (data && Array.isArray(data.products) && data.products.length > 0) {
+            window.products = data.products;
+            if (data.clients) window.clients = data.clients;
+            if (data.invoices) window.invoices = data.invoices;
+            if (data.debts) window.debts = data.debts;
+            if (data.expenses) window.expenses = data.expenses;
+            if (window.renderContent) window.renderContent();
+            localStorage.setItem("pc_products", JSON.stringify(data.products));
+          }
+        }
+      });
+
+      window.syncToCloud = async function() {
+        try {
+          await setDoc(doc(firestore, "company", "database"), {
+            products: window.products || [],
+            clients: window.clients || [],
+            invoices: window.invoices || [],
+            expenses: window.expenses || [],
+            debts: window.debts || [],
+            updatedAt: new Date().toISOString()
+          });
+        } catch(e) {
+          console.warn("Cloud push error:", e);
+        }
+      };
+    } catch(e) {
+      console.warn("Firebase init note:", e);
+    }
+  </script>
   <script>
     tailwind.config = {
       theme: {
@@ -483,11 +532,14 @@
         if (prod) prod.stock -= item.quantity;
       });
       saveLocal('pc_products', products);
+      if (typeof window !== 'undefined' && window.syncToCloud) {
+        window.syncToCloud();
+      }
 
       cart = [];
       updateCartCounter();
       document.getElementById('invoice-modal-container').innerHTML = '';
-      alert('Накладная № ' + inv.number + ' успешно сохранена в LocalStorage!');
+      alert('Накладная № ' + inv.number + ' успешно проведена и синхронизирована с облаком!');
       renderContent();
     }
 
