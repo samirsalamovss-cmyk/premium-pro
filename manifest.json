@@ -1,29 +1,27 @@
 {
-  "id": "/premium-pro/",
   "name": "Premium Chemicals PRO",
   "short_name": "Premium PRO",
   "description": "Учёт продаж, склад и накладные Premium Chemicals",
   "start_url": "./index.html",
-  "scope": "./",
   "display": "standalone",
   "background_color": "#070b12",
   "theme_color": "#070b12",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "./pwa-192x192.png",
+      "src": "https://iili.io/ntPXRkl.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "./pwa-512x512.png",
+      "src": "https://iili.io/ntPXYIS.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "./pwa-512x512.png",
+      "src": "https://iili.io/ntPX6TN.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
