@@ -159,13 +159,13 @@
 
       <div class="flex items-center gap-1.5 shrink-0">
         <button
-          id="install-pwa-btn"
-          onclick="triggerPwaInstall()"
-          class="min-h-[44px] flex items-center justify-center gap-1 px-2.5 sm:px-3 py-2 rounded-xl bg-gradient-to-r from-[#FF8A1F] to-[#ff9f43] text-black font-black text-xs shadow-lg shadow-[#ff9800]/25 transition-all cursor-pointer active:scale-95"
-          title="Установить приложение на главный экран"
+          id="owner-github-btn"
+          onclick="openGitHubModal()"
+          class="min-h-[40px] flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#00b0ff]/20 hover:bg-[#00b0ff]/30 border border-[#00b0ff]/50 text-[#00b0ff] font-extrabold text-xs transition-all cursor-pointer active:scale-95 shadow-sm whitespace-nowrap"
+          title="Обновить GitHub и скопировать ссылки"
         >
-          <span>📲</span>
-          <span class="hidden xs:inline sm:inline">Установить</span>
+          <svg class="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+          <span>GitHub</span>
         </button>
         <button
           onclick="openDrawer()"
@@ -350,8 +350,18 @@
       }
     }
 
+    // Owner Mode detection via personal link (?mode=owner) vs Public link for other people
+    if (window.location.search.includes('mode=public')) {
+      localStorage.removeItem('pc_owner_mode');
+    } else if (window.location.search.includes('owner') || window.location.hash.includes('owner')) {
+      localStorage.setItem('pc_owner_mode', '1');
+    }
+    let isOwnerMode = localStorage.getItem('pc_owner_mode') === '1';
+    let catalogMode = 'sale'; // 'sale' | 'purchase' (only in isOwnerMode)
     let cart = [];
+    let purchaseCart = [];
     let selectedClientId = clients[0]?.id || '';
+    let selectedSupplierId = debts.find((d) => d.type === 'supplier')?.id || '';
     let currentTab = 'catalog';
     let financeSubTab = 'debts'; // 'debts' | 'expenses' | 'summary'
     let debtFilter = 'all'; // 'all' | 'supplier' | 'client_receivable' | 'credit'
@@ -390,41 +400,61 @@
     function addToCart(productId) {
       const prod = products.find((p) => p.id === productId);
       if (!prod) return;
-      const exist = cart.find((i) => i.productId === productId);
-      if (exist) {
-        exist.quantity += 1;
-        exist.total = exist.quantity * exist.unitPrice;
+      if (isOwnerMode && catalogMode === 'purchase') {
+        const exist = purchaseCart.find((i) => i.productId === productId);
+        if (exist) {
+          exist.quantity += 1;
+          exist.total = exist.quantity * exist.costPrice;
+        } else {
+          purchaseCart.push({
+            productId: prod.id,
+            productName: prod.name,
+            volume: prod.volume,
+            quantity: 1,
+            costPrice: prod.costPrice || 0,
+            total: prod.costPrice || 0,
+          });
+        }
       } else {
-        cart.push({
-          productId: prod.id,
-          productName: prod.name,
-          volume: prod.volume,
-          quantity: 1,
-          unitPrice: prod.price,
-          costPrice: prod.costPrice || 0,
-          isGift: false,
-          total: prod.price,
-        });
+        const exist = cart.find((i) => i.productId === productId);
+        if (exist) {
+          exist.quantity += 1;
+          exist.total = exist.quantity * exist.unitPrice;
+        } else {
+          cart.push({
+            productId: prod.id,
+            productName: prod.name,
+            volume: prod.volume,
+            quantity: 1,
+            unitPrice: prod.price,
+            costPrice: prod.costPrice || 0,
+            isGift: false,
+            total: prod.price,
+          });
+        }
       }
       updateCartCounter();
       renderContent();
     }
 
     function changeItemQty(productId, delta) {
-      const idx = cart.findIndex((i) => i.productId === productId);
+      const targetCart = (isOwnerMode && catalogMode === 'purchase') ? purchaseCart : cart;
+      const idx = targetCart.findIndex((i) => i.productId === productId);
       if (idx === -1) return;
-      cart[idx].quantity += delta;
-      if (cart[idx].quantity <= 0) {
-        cart.splice(idx, 1);
+      targetCart[idx].quantity += delta;
+      if (targetCart[idx].quantity <= 0) {
+        targetCart.splice(idx, 1);
       } else {
-        cart[idx].total = cart[idx].quantity * cart[idx].unitPrice;
+        const priceKey = (isOwnerMode && catalogMode === 'purchase') ? 'costPrice' : 'unitPrice';
+        targetCart[idx].total = targetCart[idx].quantity * targetCart[idx][priceKey];
       }
       updateCartCounter();
       renderContent();
     }
 
     function updateCartCounter() {
-      const total = cart.reduce((s, i) => s + i.quantity, 0);
+      const activeList = (isOwnerMode && catalogMode === 'purchase') ? purchaseCart : cart;
+      const total = activeList.reduce((s, i) => s + i.quantity, 0);
       const badge = document.getElementById('cart-counter');
       if (badge) {
         if (total > 0) {
@@ -467,8 +497,28 @@
         { id: 'Аксессуары', label: 'Аксессуары' },
       ];
 
+      const activeList = (isOwnerMode && catalogMode === 'purchase') ? purchaseCart : cart;
+
       container.innerHTML = `
         <div class="space-y-3">
+          ${isOwnerMode ? `
+            <!-- Mode Switcher (ONLY visible on Samir's personal ?mode=owner link!) -->
+            <div class="grid grid-cols-2 gap-1.5 p-1.5 rounded-2xl bg-[#111f35] border border-[#1e3150] shadow-inner">
+              <button
+                onclick="catalogMode = 'sale'; updateCartCounter(); renderContent();"
+                class="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-extrabold text-xs sm:text-sm transition-all cursor-pointer ${catalogMode === 'sale' ? 'bg-gradient-to-r from-[#FF8A1F] to-[#ff9f43] text-white shadow-lg' : 'text-[#8b9bb2] hover:text-white'}"
+              >
+                <span>🛒 Продажа</span>
+              </button>
+              <button
+                onclick="catalogMode = 'purchase'; updateCartCounter(); renderContent();"
+                class="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-extrabold text-xs sm:text-sm transition-all cursor-pointer ${catalogMode === 'purchase' ? 'bg-gradient-to-r from-[#00b0ff] to-[#38bdf8] text-black shadow-lg' : 'text-[#8b9bb2] hover:text-white'}"
+              >
+                <span>🚚 Закупка (Приход)</span>
+              </button>
+            </div>
+          ` : ''}
+
           <!-- Client Banner for Sale -->
           <div class="rounded-2xl bg-[#111f35] border border-[#1e3150] p-3 flex items-center justify-between gap-2 shadow-lg">
             <div class="flex items-center gap-2.5 min-w-0">
@@ -533,10 +583,10 @@
             </span>
           </div>
 
-          <!-- Product Cards (Cost Price / Себест hidden!) -->
+          <!-- Product Cards -->
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             ${filtered.map((p) => {
-              const inCart = cart.find((i) => i.productId === p.id);
+              const inCart = activeList.find((i) => i.productId === p.id);
               const isOut = (p.stock || 0) <= 0;
               return `
                 <div class="rounded-2xl bg-[#111f35] border border-[#1e3150] hover:border-[#22C5E0]/40 transition-all p-3.5 flex flex-col justify-between shadow-lg">
@@ -580,10 +630,13 @@
                     </div>
                   </div>
 
-                  <!-- Bottom Action Bar (Retail Price only, Cost Price hidden) -->
+                  <!-- Bottom Action Bar (Cost Price visible ONLY in Samir's ?mode=owner) -->
                   <div class="mt-3 pt-3 border-t border-[#1e3150] flex items-center justify-between gap-2">
                     <div>
-                      <span class="text-base sm:text-lg font-extrabold text-white block leading-none">${formatMoney(p.price)}</span>
+                      <span class="text-base sm:text-lg font-extrabold text-white block leading-none">
+                        ${formatMoney((isOwnerMode && catalogMode === 'purchase') ? (p.costPrice || 0) : p.price)}
+                      </span>
+                      ${isOwnerMode ? `<span class="text-[10px] text-[#8b9bb2] mt-0.5 block">Себест: ${formatMoney(p.costPrice || 0)}</span>` : ''}
                     </div>
 
                     ${inCart ? `
@@ -598,7 +651,7 @@
                         class="px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer bg-[#1e3150] hover:bg-[#FF8A1F] text-white border border-[#22C5E0]/30"
                       >
                         <span>+</span>
-                        <span>В накладную</span>
+                        <span>${(isOwnerMode && catalogMode === 'purchase') ? 'В закупку' : 'В накладную'}</span>
                       </button>
                     `}
                   </div>
@@ -1489,23 +1542,25 @@
     window.openInvoiceCart = function() {
       const modal = document.getElementById('invoice-modal-container');
       if (!modal) return;
-      const subtotal = cart.reduce((s, i) => s + (i.total || 0), 0);
+      const isPur = isOwnerMode && catalogMode === 'purchase';
+      const activeList = isPur ? purchaseCart : cart;
+      const subtotal = activeList.reduce((s, i) => s + (i.total || 0), 0);
 
       modal.innerHTML = `
         <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div class="w-full max-w-md bg-[#111f35] border border-[#ff9800]/40 rounded-2xl p-5 shadow-2xl flex flex-col max-h-[90vh]">
             <div class="flex items-center justify-between pb-3 border-b border-[#1e3150]">
-              <h3 class="font-bold text-white">Накладная продажи</h3>
+              <h3 class="font-bold text-white">${isPur ? 'Приходная накладная (Закупка)' : 'Накладная продажи'}</h3>
               <button onclick="document.getElementById('invoice-modal-container').innerHTML = '';" class="text-[#8b9bb2] hover:text-white">✕</button>
             </div>
 
             <div class="overflow-y-auto space-y-2.5 my-3 flex-1 text-xs">
-              ${cart.length === 0 ? '<p class="text-center py-6 text-[#8b9bb2]">Список пуст. Выберите товары в витрине.</p>' : ''}
-              ${cart.map((it) => `
+              ${activeList.length === 0 ? '<p class="text-center py-6 text-[#8b9bb2]">Список пуст. Выберите товары в витрине.</p>' : ''}
+              ${activeList.map((it) => `
                 <div class="bg-[#0a1322] p-2.5 rounded-xl border border-[#1e3150] flex justify-between items-center">
                   <div>
                     <div class="font-bold text-white">${it.productName}</div>
-                    <div class="text-[#8b9bb2]">${it.quantity} шт × ${formatMoney(it.unitPrice)}</div>
+                    <div class="text-[#8b9bb2]">${it.quantity} шт × ${formatMoney(isPur ? it.costPrice : it.unitPrice)}</div>
                   </div>
                   <div class="font-black text-[#ff9800] tabular-nums">${formatMoney(it.total)}</div>
                 </div>
@@ -1514,11 +1569,11 @@
 
             <div class="pt-3 border-t border-[#1e3150] space-y-2">
               <div class="flex justify-between text-sm font-black text-white">
-                <span>ИТОГО К ОПЛАТЕ:</span>
+                <span>ИТОГО:</span>
                 <span class="text-[#ff9800] tabular-nums">${formatMoney(subtotal)}</span>
               </div>
-              <button onclick="finalizeOperation()" class="w-full py-3 rounded-xl bg-[#ff9800] text-white font-black text-xs shadow-lg cursor-pointer active:scale-95">
-                Провести продажу и списать со склада
+              <button onclick="finalizeOperation()" class="w-full py-3 rounded-xl ${isPur ? 'bg-[#00b0ff] text-black' : 'bg-[#ff9800] text-white'} font-black text-xs shadow-lg cursor-pointer active:scale-95">
+                ${isPur ? 'Оприходовать товар на склад' : 'Провести продажу и списать со склада'}
               </button>
             </div>
           </div>
@@ -1527,6 +1582,20 @@
     };
 
     window.finalizeOperation = function() {
+      const isPur = isOwnerMode && catalogMode === 'purchase';
+      if (isPur) {
+        if (purchaseCart.length === 0) return;
+        purchaseCart.forEach((item) => {
+          const prod = products.find((p) => p.id === item.productId);
+          if (prod) prod.stock = (Number(prod.stock) || 0) + item.quantity;
+        });
+        purchaseCart = [];
+        persistAll();
+        updateCartCounter();
+        document.getElementById('invoice-modal-container').innerHTML = '';
+        renderContent();
+        return;
+      }
       if (cart.length === 0) return;
       const subtotal = cart.reduce((s, i) => s + i.total, 0);
       const client = clients.find((c) => c.id === selectedClientId);
@@ -1559,15 +1628,13 @@
       e.preventDefault();
       window.deferredInstallPrompt = e;
     });
-    window.addEventListener('appinstalled', () => {
-      window.deferredInstallPrompt = null;
-      const btn = document.getElementById('install-pwa-btn');
-      if (btn) btn.classList.add('hidden');
-    });
-    if (window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches) {
-      const btn = document.getElementById('install-pwa-btn');
-      if (btn) btn.classList.add('hidden');
-    }
+    // Hide GitHub button in public mode so other people don't see it, show it in Owner Mode
+    (function() {
+      const ghBtn = document.getElementById('owner-github-btn');
+      if (ghBtn && !isOwnerMode) {
+        ghBtn.classList.add('hidden');
+      }
+    })();
 
     window.triggerPwaInstall = async function() {
       if (window.deferredInstallPrompt) {
@@ -1579,6 +1646,76 @@
         return;
       }
       openIosInstallGuide();
+    };
+
+    window.copyCurrentHtmlToClipboard = async function(btnEl) {
+      const fullHtml = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+      try {
+        await navigator.clipboard.writeText(fullHtml);
+      } catch (e) {
+        const ta = document.createElement('textarea');
+        ta.value = fullHtml;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      if (btnEl) {
+        btnEl.innerText = '✓ СКОПИРОВАНО! Жмите Шаг 2 →';
+        btnEl.className = 'min-h-[48px] flex items-center justify-center gap-2 px-4 py-3 rounded-2xl font-black text-xs sm:text-sm shadow-lg bg-[#10b981] text-black cursor-pointer';
+      }
+    };
+
+    window.openGitHubModal = function() {
+      const modal = document.getElementById('modal-container');
+      if (!modal) return;
+      modal.innerHTML = `
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-3 sm:p-5 overflow-y-auto">
+          <div class="w-full max-w-xl rounded-3xl bg-[#0f172a] border border-[#00b0ff]/40 shadow-2xl p-4 sm:p-6 text-[#f2f6fb] my-auto space-y-4">
+            <div class="flex items-center justify-between pb-3 border-b border-[#1e293b]">
+              <div class="flex items-center gap-2">
+                <span class="text-[#00b0ff] font-black text-base">Обновление GitHub и ваши ссылки</span>
+              </div>
+              <button onclick="document.getElementById('modal-container').innerHTML = '';" class="p-2 rounded-xl bg-[#1e293b] text-white text-xs font-bold cursor-pointer">✕</button>
+            </div>
+
+            <div class="p-3.5 rounded-2xl bg-[#070b12] border border-[#00b0ff]/40 space-y-3">
+              <div class="text-xs font-bold text-white">Обновление index.html на GitHub в 2 нажатия:</div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <button
+                  onclick="copyCurrentHtmlToClipboard(this)"
+                  class="min-h-[48px] flex items-center justify-center gap-2 px-4 py-3 rounded-2xl font-black text-xs sm:text-sm shadow-lg bg-[#ff9800] text-white cursor-pointer"
+                >
+                  Шаг 1. Скопировать код index.html
+                </button>
+                <a
+                  href="https://github.com/samirsalamovss-cmyk/premium-pro/edit/main/index.html"
+                  target="_blank"
+                  rel="noreferrer"
+                  class="min-h-[48px] flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-[#00b0ff] text-black font-black text-xs sm:text-sm shadow-lg cursor-pointer"
+                >
+                  Шаг 2. Открыть редактор index.html ↗
+                </a>
+              </div>
+            </div>
+
+            <div class="space-y-2.5 text-xs">
+              <div class="p-3 rounded-xl bg-[#070b12] border border-[#ff9800]/40 space-y-1.5">
+                <div class="font-black text-[#ff9800]">1. ВАША ЛИЧНАЯ ССЫЛКА (с кнопкой GitHub, Закупкой и Себестоимостью):</div>
+                <div class="p-2 rounded-lg bg-[#0f172a] font-mono text-[11px] text-[#ff9800] break-all select-all">https://samirsalamovss-cmyk.github.io/premium-pro/?mode=owner</div>
+              </div>
+              <div class="p-3 rounded-xl bg-[#070b12] border border-[#00b0ff]/40 space-y-1.5">
+                <div class="font-black text-[#00b0ff]">2. ССЫЛКА ДЛЯ ДРУГИХ ЛЮДЕЙ (БЕЗ кнопки GitHub, БЕЗ Закупки и БЕЗ Себестоимости):</div>
+                <div class="p-2 rounded-lg bg-[#0f172a] font-mono text-[11px] text-[#00b0ff] break-all select-all">https://samirsalamovss-cmyk.github.io/premium-pro/?mode=public</div>
+              </div>
+            </div>
+
+            <button onclick="document.getElementById('modal-container').innerHTML = '';" class="w-full py-3 rounded-xl bg-[#1e293b] text-white font-black text-xs cursor-pointer">
+              Закрыть
+            </button>
+          </div>
+        </div>
+      `;
     };
 
     // Full Interactive Slide-Over Menu ("Шторка") when pressing [ С ☰ ]
